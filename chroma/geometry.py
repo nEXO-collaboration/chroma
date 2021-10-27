@@ -241,6 +241,12 @@ class DichroicProps(object):
         self.dichroic_reflect = np.asarray(reflect) #[angle][point]
         self.dichroic_transmit = np.asarray(transmit) #[angle][point]
 
+class SiPMEmpiricalProps(object):
+    def __init__(self, angles, reflect, relativePDE):
+        self.angles = np.asarray(angles)
+        self.sipmEmpirical_reflect = np.asarray(reflect)
+        self.sipmEmpirical_relativePDE = np.asarray(relativePDE)
+
 class Surface(object):
     """Surface optical properties."""
     def __init__(self, name='none', model=0):
@@ -257,6 +263,7 @@ class Surface(object):
         self.set('reemission_cdf', 0)
         
         self.dichroic_props = None
+        self.sipmEmpirical_props = None
 
         self.thickness = 0.0
         self.transmissive = 0

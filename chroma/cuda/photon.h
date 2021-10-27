@@ -365,15 +365,20 @@ propagate_at_boundary(Photon &p, State &s, curandState &rng)
 __device__ int
 propagate_at_specular_reflector(Photon &p, State &s)
 {
-    float incident_angle = get_theta(s.surface_normal, -p.direction);
-    float3 incident_plane_normal = cross(p.direction, s.surface_normal);
-    incident_plane_normal /= norm(incident_plane_normal);
-
-    p.direction = rotate(s.surface_normal, incident_angle, incident_plane_normal);
-
+    float3 p_projection = s.surface_normal * (dot(s.surface_normal, p.direction));
+    p.direction = p.direction - 2.0f * p_projection;
     p.history |= REFLECT_SPECULAR;
 
     return CONTINUE;
+    // float incident_angle = get_theta(s.surface_normal, -p.direction);
+    // float3 incident_plane_normal = cross(p.direction, s.surface_normal);
+    // incident_plane_normal /= norm(incident_plane_normal);
+
+    // p.direction = rotate(s.surface_normal, incident_angle, incident_plane_normal);
+
+    // p.history |= REFLECT_SPECULAR;
+
+    // return CONTINUE;
 } // propagate_at_specular_reflector
 
 __device__ int
@@ -638,6 +643,139 @@ propagate_at_dichroic(Photon &p, State &s, curandState &rng, Surface *surface, b
 } // propagate_at_dichroic
 
 __device__ int
+propagate_dielectric_metal(Photon &p, State &s, curandState &rng, Surface* surface, bool use_weights=false)
+{
+    // The interface of a dielectric material and a conductive material
+    // transmission is not permitted. Only absorption and reflection are considered
+    // The index of refraction for the conductive material is n2 = eta + i * k. The bulk index
+    // of refraction for material 2 is not used.
+    float detect = interp_property(surface, p.wavelength, surface->detect);
+    float reflect_specular = interp_property(surface, p.wavelength, surface->reflect_specular);
+    float reflect_diffuse = interp_property(surface, p.wavelength, surface->reflect_diffuse);
+    float n1 = s.refractive_index1;
+    // n2 = n2_eta + i * n2_k (complex)
+    float n2_eta = interp_property(surface, p.wavelength, surface->eta);
+    float n2_k = interp_property(surface, p.wavelength, surface->k);
+
+    float cos_t1 = dot(p.direction, s.surface_normal);
+    if (cos_t1 < 0.0f)
+        cos_t1 = -cos_t1;
+    float sin2_t1 = 1.0f - cos_t1 * cos_t1;
+
+    // n2 cos_t2 = u2 + i * v2
+    float eta22_k22 = n2_eta * n2_eta - n2_k * n2_k;
+    float eta2k2 = n2_eta * n2_k;
+    float A = eta22_k22 - n1 * n1 * sin2_t1;
+    float B = sqrt(A * A + 4.0f * eta2k2 * eta2k2);
+    float u2 = sqrt((A + B) / 2.0f);
+    float v22 = (-A + B) / 2.0f;
+    float v2 = sqrt(v22);
+
+    // s polarization
+    float s_num1 = n1 * cos_t1 - u2;
+    float s_denom1 = n1 * cos_t1 + u2;
+    float R_s = (s_num1 * s_num1 + v22) / (s_denom1 * s_denom1 + v22);
+
+    // p polarization
+    float p_num1 = eta22_k22 * cos_t1 - n1 * u2;
+    float p_num2 = 2.0f * eta2k2 * cos_t1 - n1 * v2;
+    float p_denom1 = eta22_k22 * cos_t1 + n1 * u2;
+    float p_denom2 = 2.0f * eta2k2 * cos_t1 + n1 * v2;
+    float R_p = (p_num1 * p_num1 + p_num2 * p_num2) / (p_denom1 * p_denom1 + p_denom2 * p_denom2);
+
+    // calculate s polarization fraction, identical to propagate_at_boundary
+    float incident_angle = get_theta(s.surface_normal,-p.direction);
+
+    float3 incident_plane_normal = cross(p.direction, s.surface_normal);
+    float incident_plane_normal_length = norm(incident_plane_normal);
+
+    if (incident_plane_normal_length < 1e-6f)
+        incident_plane_normal = p.polarization;
+    else
+        incident_plane_normal /= incident_plane_normal_length;
+
+    float normal_coefficient = dot(p.polarization, incident_plane_normal);
+    float normal_probability = normal_coefficient * normal_coefficient; // i.e. s polarization fraction
+
+    // transmission not allowed
+    float reflect = normal_probability * R_s + (1.0f - normal_probability) * R_p;
+    float absorb = 1.0f - reflect;
+
+    if (use_weights && p.weight > WEIGHT_LOWER_THRESHOLD && absorb < (1.0f - WEIGHT_LOWER_THRESHOLD)) {
+        // Prevent absorption and reweight accordingly
+        float survive = 1.0f - absorb;
+        absorb = 0.0f;
+        p.weight *= survive;
+        reflect /= survive;
+    }
+
+
+    float uniform_sample = curand_uniform(&rng);
+
+    if (uniform_sample < reflect) {
+        // reflect, specularly (default) or diffusely
+        float uniform_sample_reflect = curand_uniform(&rng);
+        if (uniform_sample_reflect < reflect_diffuse)
+            return propagate_at_diffuse_reflector(p, s, rng);
+        else
+            return propagate_at_specular_reflector(p, s);
+    }
+    else {
+        // absorb
+        // detection probability is conditional on absorption here
+        float uniform_sample_detect = curand_uniform(&rng);
+        if (uniform_sample_detect < detect)
+            p.history |= SURFACE_DETECT;
+        else
+            p.history |= SURFACE_ABSORB;
+
+        return BREAK;
+    }
+} // propagate_dielectric_metal
+
+__noinline__ __device__ int
+propagate_at_sipmEmpirical(Photon &p, State &s, curandState &rng, Surface *surface, bool use_weights=false)
+{
+    float cos_t1 = dot(s.surface_normal,-p.direction);
+    float incident_angle;
+    if (fabsf(cos_t1) < 1.0f-1e-6f) {
+        incident_angle = acosf(cos_t1);
+    } else {
+        incident_angle = 0.0f;
+    }
+    
+    const SiPMEmpiricalProps *props = surface->sipmEmpirical_props;
+    float idx = interp_idx(incident_angle,props->nangles,props->angles);
+
+    unsigned int iidx = (int)idx;
+    
+    float reflect_prob_low = interp_property(surface, p.wavelength, props->sipmEmpirical_reflect[iidx]);
+    float reflect_prob_high = interp_property(surface, p.wavelength, props->sipmEmpirical_reflect[iidx+1]);
+    float relativePDE_prob_low = interp_property(surface, p.wavelength, props->sipmEmpirical_relativePDE[iidx]);
+    float relativePDE_prob_high = interp_property(surface, p.wavelength, props->sipmEmpirical_relativePDE[iidx+1]);
+    
+    float reflect_prob = reflect_prob_low + (reflect_prob_high-reflect_prob_low)*(idx-iidx);
+    float relativePDE_prob = relativePDE_prob_low + (relativePDE_prob_high-relativePDE_prob_low)*(idx-iidx);
+    
+    float uniform_sample = curand_uniform(&rng);
+    if ((uniform_sample < reflect_prob)) {
+        return propagate_at_specular_reflector(p, s);
+    }
+    else {
+        // absorb
+        // detection probability is conditional on absorption here
+        float uniform_sample_detect = curand_uniform(&rng);
+        if (uniform_sample_detect < relativePDE_prob)
+            p.history |= SURFACE_DETECT;
+        else
+            p.history |= SURFACE_ABSORB;
+
+        return BREAK;
+    }
+
+} // propagate_at_sipmEmpirical
+
+__device__ int
 propagate_at_surface(Photon &p, State &s, curandState &rng, Geometry *geometry,
                      bool use_weights=false)
 {
@@ -649,6 +787,10 @@ propagate_at_surface(Photon &p, State &s, curandState &rng, Geometry *geometry,
         return propagate_at_wls(p, s, rng, surface, use_weights);
     else if (surface->model == SURFACE_DICHROIC)
         return propagate_at_dichroic(p, s, rng, surface, use_weights);
+    else if (surface->model == SURFACE_DIELECTRIC_METAL)
+        return propagate_dielectric_metal(p, s, rng, surface, use_weights);
+    else if (surface->model == SURFACE_SIPM_EMPIRICAL)
+        return propagate_at_sipmEmpirical(p, s, rng, surface, use_weights);
     else {
         // use default surface model: do a combination of specular and
         // diffuse reflection, detection, and absorption based on relative

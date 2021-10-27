@@ -33,6 +33,7 @@ class GPUGeometry(object):
         material_struct_size = characterize.sizeof('Material', geometry_source)
         surface_struct_size = characterize.sizeof('Surface', geometry_source)
         dichroicprops_struct_size = characterize.sizeof('DichroicProps', geometry_source)
+        simpempiricalprops_struct_size = characterize.sizeof('SiPMEmpiricalProps', geometry_source)
         geometry_struct_size = characterize.sizeof('Geometry', geometry_source)
 
         self.material_data = []
@@ -158,7 +159,30 @@ class GPUGeometry(object):
             else:
                 dichroic_props = np.uint64(0) #NULL
             
-            
+            if surface.sipmEmpirical_props:
+                props = surface.sipmEmpirical_props
+                relativePDE_pointers = []
+                reflect_pointers = []
+                angles_gpu = ga.to_gpu(np.asarray(props.angles, dtype = np.float32))
+                self.surface_data.append(angles_gpu)
+                for i, angle in enumerate(props.angles):
+                    sipmEmpirical_reflect = interp_material_property(wavelengths, props.sipmEmpirical_reflect[i])
+                    sipmEmpirical_reflect_gpu = ga.to_gpu(sipmEmpirical_reflect)
+                    self.surface_data.append(sipmEmpirical_reflect_gpu)
+                    reflect_pointers.append(sipmEmpirical_reflect_gpu)
+
+                    sipmEmpirical_relativePDE = interp_material_property(wavelengths, props.sipmEmpirical_relativePDE[i])
+                    sipmEmpirical_relativePDE_gpu = ga.to_gpu(sipmEmpirical_relativePDE)
+                    self.surface_data.append(sipmEmpirical_relativePDE_gpu)
+                    relativePDE_pointers.append(sipmEmpirical_relativePDE_gpu)
+
+                reflect_arr_gpu = make_gpu_struct(8 * len(reflect_pointers), reflect_pointers)
+                self.surface_data.append(reflect_arr_gpu)
+                relativePDE_arr_gpu = make_gpu_struct(8 * len(relativePDE_pointers), relativePDE_pointers)
+                self.surface_data.append(relativePDE_arr_gpu)
+                sipmEmpirical_props = make_gpu_struct(simpempiricalprops_struct_size, [angles_gpu, reflect_arr_gpu, relativePDE_arr_gpu, np.uint32(len(props.angles))])
+            else:
+                sipmEmpirical_props = np.uint64(0) #NULL
 
             self.surface_data.append(detect_gpu)
             self.surface_data.append(absorb_gpu)
@@ -169,6 +193,7 @@ class GPUGeometry(object):
             self.surface_data.append(eta_gpu)
             self.surface_data.append(k_gpu)
             self.surface_data.append(dichroic_props)
+            self.surface_data.append(sipmEmpirical_props)
             
             surface_gpu = \
                 make_gpu_struct(surface_struct_size,
@@ -176,6 +201,7 @@ class GPUGeometry(object):
                                  reflect_diffuse_gpu,reflect_specular_gpu,
                                  eta_gpu, k_gpu, reemission_cdf_gpu,
                                  dichroic_props,
+                                 sipmEmpirical_props,
                                  np.uint32(surface.model),
                                  np.uint32(len(wavelengths)),
                                  np.uint32(surface.transmissive),
