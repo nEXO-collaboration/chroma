@@ -1032,8 +1032,11 @@ class EventViewer(Camera):
 
         Camera.process_event(self, event)
 
-def view(obj, size=(800,600), **camera_kwargs):
-    geometry = create_geometry_from_obj(obj)
-    camera = Camera(geometry, size, **camera_kwargs)
-    camera.start()
-    camera.join()
+def view(obj, size=(800,600), mode='start', **camera_kwargs):
+     geometry = create_geometry_from_obj(obj)
+     camera = Camera(geometry, size, **camera_kwargs)
+     if mode=='run':
+         camera.run()
+     elif mode=='start':
+         camera.start()
+         camera.join()
