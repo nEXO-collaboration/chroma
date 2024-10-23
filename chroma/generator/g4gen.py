@@ -51,6 +51,10 @@ def create_g4material(material):
         data = material.scintillation_light_yield 
         if data is not None:
             prop_table.AddConstProperty('LIGHT_YIELD',data)
+    if 'scintillation_rise_time' in material.__dict__:
+        data = material.scintillation_rise_time
+        if data is not None:
+            prop_table.AddConstProperty('SCINT_RISE_TIME',data)
 
     # Load properties into material
     g4material.SetMaterialPropertiesTable(prop_table)

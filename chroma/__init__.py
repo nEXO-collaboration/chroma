@@ -6,13 +6,16 @@ from chroma import geometry
 from chroma import event
 from chroma import generator
 from chroma.generator import constant_particle_gun
-from chroma import gpu
+try: 
+    from chroma import gpu
+    from chroma.sim import Simulation
+except ImportError:
+    print("WARNING: GPU context init failed. Chroma cannot perform simulations!")
 from chroma import itertoolset
 #from chroma import likelihood
 #from chroma.likelihood import Likelihood
 from chroma import make
 from chroma.demo import optics
 from chroma import sample
-from chroma.sim import Simulation
 from chroma.stl import mesh_from_stl
 from chroma import transform

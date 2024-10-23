@@ -305,7 +305,7 @@ class RootWriter(object):
         "Write an event.Event object to the ROOT tree as a ROOT.Event object."
         self.ev.id = pyev.id
         
-        if pyev.photons_beg is not None:
+        if pyev.photons_beg is not None and len(pyev.photons_beg)!=0:
             photons = pyev.photons_beg
             if len(photons.pos) > 0:
                 ROOT.fill_photons(self.ev.photons_beg,
@@ -319,7 +319,7 @@ class RootWriter(object):
         else:
             self.ev.photons_beg.resize(0)
 
-        if pyev.photons_end is not None:
+        if pyev.photons_end is not None and len(pyev.photons_end)!=0:
             photons = pyev.photons_end
             if len(photons.pos) > 0:
                 ROOT.fill_photons(self.ev.photons_end,
@@ -333,7 +333,7 @@ class RootWriter(object):
         else:
             self.ev.photons_end.resize(0)
         
-        if pyev.photon_tracks is not None:
+        if pyev.photon_tracks is not None and len(pyev.photon_tracks)!=0:
             self.ev.photon_tracks.resize(len(pyev.photon_tracks))
             for i in range(len(pyev.photon_tracks)):
                 photons = pyev.photon_tracks[i]
@@ -346,10 +346,12 @@ class RootWriter(object):
                               photons.wavelengths, photons.t,
                               photons.last_hit_triangles, photons.flags, 
                               photons.channel)
+        else:
+            self.ev.photon_tracks.resize(0)
+        if pyev.photon_parent_trackids is not None:
             self.ev.photon_parent_trackids.resize(len(pyev.photon_parent_trackids))
             np.asarray(self.ev.photon_parent_trackids)[:] = pyev.photon_parent_trackids
         else:
-            self.ev.photon_tracks.resize(0)
             self.ev.photon_parent_trackids.resize(0)
         
         if pyev.vertices is not None:

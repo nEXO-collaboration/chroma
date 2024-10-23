@@ -629,6 +629,12 @@ void GLG4Scint::MyPhysicsTable::Entry::Build(
     property_string << "SCINTWAVEFORM" << _name;
     G4MaterialPropertyVector *theWaveForm =
         aMaterialPropertiesTable->GetProperty(property_string.str().c_str());
+  
+  double rise_time = 0.0;
+
+  if (aMaterialPropertiesTable->ConstPropertyExists("SCINT_RISE_TIME")) {
+    rise_time = aMaterialPropertiesTable->GetConstProperty("SCINT_RISE_TIME");
+  }
 
     if (theWaveForm) {
         // Do we have time-series or decay-time data?
@@ -667,8 +673,12 @@ void GLG4Scint::MyPhysicsTable::Entry::Build(
                 G4double decy = theWaveForm->Energy(j);
                 {
                     for (int ii = 0; ii < nbins; ii++) {
+                 	if (rise_time != 0.0) {
+                   		ival[ii] += ampl*(-decy*(1.0-exp(tval[ii]/decy))+rise_time*(exp(-tval[ii]/rise_time)-1))/(-decy-rise_time);
+                 } else {
                         ival[ii] += ampl * (1.0 - exp(tval[ii] / decy));
-                    }
+		 }   
+		 }
                 }
             }
 

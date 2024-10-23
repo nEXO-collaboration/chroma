@@ -18,7 +18,7 @@ standard_wavelengths = np.arange(60, 1000, 5).astype(np.float32)
 
 class Mesh(object):
     "Triangle mesh object."
-    def __init__(self, vertices, triangles, remove_duplicate_vertices=False):
+    def __init__(self, vertices, triangles, remove_duplicate_vertices=False, round=True, remove_null_triangles=True):
         vertices = np.asarray(vertices, dtype=np.float32)
         triangles = np.asarray(triangles, dtype=np.int32)
 
@@ -37,9 +37,16 @@ class Mesh(object):
 
         self.vertices = vertices
         self.triangles = triangles
-
+        if len(self.vertices) == 0:
+            logger.warning("Generated mesh has no vertices.")
+        if len(self.triangles) == 0:
+            logger.warning("Generated mesh has no triangles.")
+        if round:
+            self.vertices = self.vertices.round(decimals=12)
         if remove_duplicate_vertices:
             self.remove_duplicate_vertices()
+        if remove_null_triangles:
+            self.remove_null_triangles()
 
     def get_triangle_centers(self):
         "Returns the x,y,z coordinate of the center of each triangle."
@@ -65,6 +72,8 @@ class Mesh(object):
         Returns the mask of retained triangles, which may be applied to the
         material, surface, etc., arrays of an associated ``Solid``.
         '''
+        if len(self.triangles) == 0:
+            return
         mask = np.array([(len(set(x)) == 3) for x in self.triangles])
         self.triangles = self.triangles[mask]
         return mask
@@ -108,25 +117,24 @@ class Solid(object):
     in a Mesh object."""
     def __init__(self, mesh, material1=None, material2=None, surface=None, color=0x33ffffff):
         self.mesh = mesh
-
         if np.iterable(material1):
             if len(material1) != len(mesh.triangles):
                 raise ValueError('shape mismatch')
-            self.material1 = np.array(material1, dtype=np.object)
+            self.material1 = np.array(material1, dtype=object)
         else:
             self.material1 = np.tile(material1, len(self.mesh.triangles))
 
         if np.iterable(material2):
             if len(material2) != len(mesh.triangles):
                 raise ValueError('shape mismatch')
-            self.material2 = np.array(material2, dtype=np.object)
+            self.material2 = np.array(material2, dtype=object)
         else:
             self.material2 = np.tile(material2, len(self.mesh.triangles))
 
         if np.iterable(surface):
             if len(surface) != len(mesh.triangles):
                 raise ValueError('shape mismatch')
-            self.surface = np.array(surface, dtype=np.object)
+            self.surface = np.array(surface, dtype=object)
         else:
             self.surface = np.tile(surface, len(self.mesh.triangles))
 
@@ -210,6 +218,7 @@ class Material(object):
         self.scattering_length = None
         self.scintillation_spectrum = None
         self.scintillation_light_yield = None
+        self.scintillation_rise_time = None
         self.scintillation_waveform = None
         self.scintillation_mod = None
         self.comp_reemission_prob = []
@@ -353,7 +362,7 @@ class Geometry(object):
             triangles[nt[i]:nt[i+1]] = solid.mesh.triangles + nv[i]
 
         # Different solids are very unlikely to share vertices, so this goes much faster
-        self.mesh = Mesh(vertices, triangles, remove_duplicate_vertices=False)
+        self.mesh = Mesh(vertices, triangles, remove_duplicate_vertices=True, remove_null_triangles=False)
 
         self.colors = np.concatenate([solid.color for solid in self.solids])
 

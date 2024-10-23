@@ -26,6 +26,26 @@ from pygame.locals import *
 from timeit import default_timer as timer
 
 def bvh_mesh(geometry, layer):
+    """
+    Creates a 3D mesh visualization of the bounding volume hierarchy (BVH) tree at a specified layer for a given 3D model.
+
+    Parameters
+    ----------
+    geometry: Geometry
+        A Geometry object containing the geometries of the 3D model.
+    layer: int
+        An integer specifying the layer of the BVH tree to be visualized.
+
+    Returns
+    -------
+    Geometry
+        A Geometry object containing a 3D mesh visualization of the BVH tree at the specified layer.
+
+    Raises
+    ------
+    Exception
+        If there are no nodes at the specified layer.
+    """
     lower_bounds, upper_bounds = geometry.bvh.get_layer(layer).get_bounds()
 
     if len(lower_bounds) == 0 or len(upper_bounds) == 0:
@@ -45,6 +65,19 @@ def bvh_mesh(geometry, layer):
     return create_geometry_from_obj(geometry)
 
 def encode_movie(dir):
+    """
+    Creates a movie file from a series of image frames stored in a specified directory.
+
+    Parameters
+    ----------
+    dir: str
+        A string specifying the directory containing the image frames for the movie.
+
+    Returns
+    -------
+    None
+        The function saves the movie file to the current working directory and prints a message indicating where it was saved.
+    """
     root, ext = 'movie', 'avi'
     for i in itertools.count():
         path = '.'.join([root + str(i).zfill(5), ext])
@@ -648,11 +681,9 @@ class Camera(multiprocessing.Process):
         self.window = pygame.display.set_mode(self.size)
         self.screen = pygame.Surface(self.size, pygame.SRCALPHA)
         pygame.display.set_caption('')
-        
         self.init_gpu()
         #makes things significantly faster somehow
         self.rotate(0.001,[1/np.sqrt(2),0,1/np.sqrt(2)])
-        
         if self.spnav:
             try:
                 wm_info = pygame.display.get_wm_info()
@@ -662,9 +693,7 @@ class Camera(multiprocessing.Process):
                 #print 'Space Navigator support enabled.'
             except:
                 self.spnav = False
-
         self.update()
-
         self.done = False
         self.clicked = False
 
@@ -878,7 +907,7 @@ class EventViewer(Camera):
                 scintillation = scintillation[selector]
                 reemission = reemission[selector]
             nphotons = len(tracks)
-            prob = self.photons_max/nphotons if self.photons_max is not None else 1.0
+            prob = self.photons_max/nphotons if self.photons_max is not None and nphotons!= 0 else 1.0
             selector = np.random.random(len(tracks)) < prob
             nphotons = np.count_nonzero(selector)
             for i,track in ((i,t) for i,(s,t) in enumerate(zip(selector,tracks)) if s):
@@ -897,7 +926,13 @@ class EventViewer(Camera):
                 geometry = create_geometry_from_obj(geometry)
                 gpu_geometry = gpu.GPUGeometry(geometry)
                 self.gpu_geometries.append(gpu_geometry)
-            
+    
+    def render_mc_info_all_events(self):
+        print('Summing events in file...')
+        for i, ev in enumerate(self.rr):
+            self.ev = ev
+            self.render_mc_info()
+        print('Summed over %i events.'%i)
 
     def sum_events(self):
         print('Summing events in file...')
@@ -1027,6 +1062,10 @@ class EventViewer(Camera):
                     return
                 self.color_hit_pmts()
                 self.render_mc_info()
+                self.update()
+                return
+            elif event.key == K_o:
+                self.render_mc_info_all_events()
                 self.update()
                 return
 
