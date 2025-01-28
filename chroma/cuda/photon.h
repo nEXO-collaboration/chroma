@@ -759,7 +759,13 @@ propagate_at_sipmEmpirical(Photon &p, State &s, curandState &rng, Surface *surfa
     
     float uniform_sample = curand_uniform(&rng);
     if ((uniform_sample < reflect_prob)) {
-        return propagate_at_specular_reflector(p, s);
+        // Determine if reflection is diffuse or specular
+        float reflection_type = curand_uniform(&rng);
+        if (reflection_type < props->diffuseRefl) {
+            return propagate_at_diffuse_reflector(p, s, rng);
+        } else {
+            return propagate_at_specular_reflector(p, s);
+        }
     }
     else {
         // absorb

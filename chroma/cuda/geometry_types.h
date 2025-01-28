@@ -39,6 +39,7 @@ struct SiPMEmpiricalProps
     float *angles;
     float **sipmEmpirical_reflect;
     float **sipmEmpirical_relativePDE;
+    float diffuseRefl;  
     unsigned int nangles;
 };
 
