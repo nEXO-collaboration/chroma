@@ -430,8 +430,7 @@ propagate_complex(Photon &p, State &s, curandState &rng, Surface* surface, bool 
     cuFloatComplex ratio12sin = cuCmulf(cuCmulf(cuCdivf(n1, n2), cuCdivf(n1, n2)), cuCmulf(sin1, sin1));
     cuFloatComplex cos2 = cuCsqrtf(cuCsubf(make_cuFloatComplex(1.0f,0.0f), ratio12sin));
     float u = cuCrealf(cuCmulf(n2, cos2));
-    float v22 = cuCimagf(cuCmulf(n2, cos2));
-    float v2 = sqrt(v22);
+    float v = cuCimagf(cuCmulf(n2, cos2));
 
     // s polarization
     cuFloatComplex s_n1c1 = cuCmulf(n1, cos1);
@@ -782,7 +781,7 @@ propagate_at_sipmEmpirical(Photon &p, State &s, curandState &rng, Surface *surfa
         // Absorbed without signal
         p.history |= SURFACE_ABSORB;
     }
-    return BREAK;
+return BREAK;
 }// propagate_at_sipmEmpirical
 
 __device__ int
