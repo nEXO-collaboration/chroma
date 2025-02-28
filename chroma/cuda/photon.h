@@ -756,30 +756,30 @@ propagate_at_sipmEmpirical(Photon &p, State &s, curandState &rng, Surface *surfa
     
     float reflect_prob = reflect_prob_low + (reflect_prob_high-reflect_prob_low)*(idx-iidx);
     float relativePDE_prob = relativePDE_prob_low + (relativePDE_prob_high-relativePDE_prob_low)*(idx-iidx);
+
+    float uniform_sample1 = curand_uniform(&rng);
+    if (uniform_sample1 < props->diffuseRefl) {
+        // Diffuse reflection
+        return propagate_at_diffuse_reflector(p, s, rng);
+    }
     
-    float uniform_sample = curand_uniform(&rng);
-    if ((uniform_sample < reflect_prob)) {
-        // Determine if reflection is diffuse or specular
-        float reflection_type = curand_uniform(&rng);
-        if (reflection_type < props->diffuseRefl) {
-            return propagate_at_diffuse_reflector(p, s, rng);
-        } else {
-            return propagate_at_specular_reflector(p, s);
-        }
+    // Step 2: Check for specular reflection (second Bernoulli trial)
+    float uniform_sample2 = curand_uniform(&rng);
+    if (uniform_sample2 < reflect_prob) {
+        // Specular reflection
+        return propagate_at_specular_reflector(p, s);
     }
-    else {
-        // absorb
-        // detection probability is conditional on absorption here
-        float uniform_sample_detect = curand_uniform(&rng);
-        if (uniform_sample_detect < relativePDE_prob)
-            p.history |= SURFACE_DETECT;
-        else
-            p.history |= SURFACE_ABSORB;
-
+    
+    // If we get here, photon is transmitted into silicon bulk
+    // Check for detection (final Bernoulli trial)
+    float uniform_sample3 = curand_uniform(&rng);
+    if (uniform_sample3 < relativePDE_prob) {
+        p.history |= SURFACE_DETECT;
+    } else {
+        p.history |= SURFACE_ABSORB;  // Absorbed in silicon without producing signal
+    } 
         return BREAK;
-    }
-
-} // propagate_at_sipmEmpirical
+}// propagate_at_sipmEmpirical
 
 __device__ int
 propagate_at_surface(Photon &p, State &s, curandState &rng, Geometry *geometry,
