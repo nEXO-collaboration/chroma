@@ -430,7 +430,8 @@ propagate_complex(Photon &p, State &s, curandState &rng, Surface* surface, bool 
     cuFloatComplex ratio12sin = cuCmulf(cuCmulf(cuCdivf(n1, n2), cuCdivf(n1, n2)), cuCmulf(sin1, sin1));
     cuFloatComplex cos2 = cuCsqrtf(cuCsubf(make_cuFloatComplex(1.0f,0.0f), ratio12sin));
     float u = cuCrealf(cuCmulf(n2, cos2));
-    float v = cuCimagf(cuCmulf(n2, cos2));
+    float v22 = cuCimagf(cuCmulf(n2, cos2));
+    float v2 = sqrt(v22);
 
     // s polarization
     cuFloatComplex s_n1c1 = cuCmulf(n1, cos1);
@@ -757,28 +758,31 @@ propagate_at_sipmEmpirical(Photon &p, State &s, curandState &rng, Surface *surfa
     float reflect_prob = reflect_prob_low + (reflect_prob_high-reflect_prob_low)*(idx-iidx);
     float relativePDE_prob = relativePDE_prob_low + (relativePDE_prob_high-relativePDE_prob_low)*(idx-iidx);
 
-    float uniform_sample1 = curand_uniform(&rng);
-    if (uniform_sample1 < props->diffuseRefl) {
+    float uniform_sample = curand_uniform(&rng);
+
+    // Calculate the probability thresholds for a single random number
+    float p1 = props->diffuseRefl;  // Diffuse reflection threshold
+    float p2 = p1 + (1.0f - p1) * reflect_prob;  // Specular reflection threshold 
+    float p3 = p2 + (1.0f - p1) * (1.0f - reflect_prob) * relativePDE_prob;  // Detection threshold
+
+    // Use one random number to determine outcome
+    if (uniform_sample < p1) {
         // Diffuse reflection
         return propagate_at_diffuse_reflector(p, s, rng);
     }
-    
-    // Step 2: Check for specular reflection (second Bernoulli trial)
-    float uniform_sample2 = curand_uniform(&rng);
-    if (uniform_sample2 < reflect_prob) {
+    else if (uniform_sample < p2) {
         // Specular reflection
         return propagate_at_specular_reflector(p, s);
-    }
-    
-    // If we get here, photon is transmitted into silicon bulk
-    // Check for detection (final Bernoulli trial)
-    float uniform_sample3 = curand_uniform(&rng);
-    if (uniform_sample3 < relativePDE_prob) {
-        p.history |= SURFACE_DETECT;
-    } else {
-        p.history |= SURFACE_ABSORB;  // Absorbed in silicon without producing signal
     } 
-        return BREAK;
+    else if (uniform_sample < p3) {
+        // Detection
+        p.history |= SURFACE_DETECT;
+    } 
+    else {
+        // Absorbed without signal
+        p.history |= SURFACE_ABSORB;
+    }
+    return BREAK;
 }// propagate_at_sipmEmpirical
 
 __device__ int
