@@ -162,6 +162,7 @@ class GPUGeometry(object):
             if surface.sipmEmpirical_props:
                 props = surface.sipmEmpirical_props
                 diffuseRefl = props.diffuseRefl
+                Absorption = props.Absorption
                 relativePDE_pointers = []
                 reflect_pointers = []
                 angles_gpu = ga.to_gpu(np.asarray(props.angles, dtype = np.float32))
@@ -181,7 +182,9 @@ class GPUGeometry(object):
                 self.surface_data.append(reflect_arr_gpu)
                 relativePDE_arr_gpu = make_gpu_struct(8 * len(relativePDE_pointers), relativePDE_pointers)
                 self.surface_data.append(relativePDE_arr_gpu)
-                sipmEmpirical_props = make_gpu_struct(simpempiricalprops_struct_size, [angles_gpu, reflect_arr_gpu, relativePDE_arr_gpu, np.float32(diffuseRefl), np.uint32(len(props.angles))])
+                sipmEmpirical_props = make_gpu_struct(simpempiricalprops_struct_size, [angles_gpu, reflect_arr_gpu, 
+                                                                                       relativePDE_arr_gpu, np.float32(diffuseRefl), 
+                                                                                       np.float32(Absorption),np.uint32(len(props.angles))])
             else:
                 sipmEmpirical_props = np.uint64(0) #NULL
 

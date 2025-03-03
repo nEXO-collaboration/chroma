@@ -40,6 +40,7 @@ struct SiPMEmpiricalProps
     float **sipmEmpirical_reflect;
     float **sipmEmpirical_relativePDE;
     float diffuseRefl;  
+    float Absorption;
     unsigned int nangles;
 };
 
