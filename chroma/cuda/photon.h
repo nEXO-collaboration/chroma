@@ -753,50 +753,46 @@ propagate_at_sipmEmpirical(Photon &p, State &s, curandState &rng, Surface *surfa
     float reflect_prob_high = interp_property(surface, p.wavelength, props->sipmEmpirical_reflect[iidx+1]);
     float relativePDE_prob_low = interp_property(surface, p.wavelength, props->sipmEmpirical_relativePDE[iidx]);
     float relativePDE_prob_high = interp_property(surface, p.wavelength, props->sipmEmpirical_relativePDE[iidx+1]);
+    float transmit_prob_low = interp_property(surface, p.wavelength, props->sipmEmpirical_transmit[iidx]);
+    float transmit_prob_high = interp_property(surface, p.wavelength, props->sipmEmpirical_transmit[iidx+1]);
     
+    float transmit_prob = transmit_prob_low + (transmit_prob_high-transmit_prob_low)*(idx-iidx);
     float reflect_prob = reflect_prob_low + (reflect_prob_high-reflect_prob_low)*(idx-iidx);
     float relativePDE_prob = relativePDE_prob_low + (relativePDE_prob_high-relativePDE_prob_low)*(idx-iidx);
 
-    // Absorption parameter from equation 4 (= 0.27 in the ExCT paper)
-    float absorption_A = props->Absorption;
+    float fillFactor = props->FillFactor;
     float uniform_sample = curand_uniform(&rng);
     
-    // Calculate the probability thresholds for a single random number
-    float p1 = props->diffuseRefl;  // Diffuse reflection threshold
+    // Calculate cumulative probability thresholds for a single random sample
+    float p_diffuse = (1.0f - fillFactor) * props->diffuseRefl; // (1-FF)*RD
+    float p_specular = p_diffuse + fillFactor * reflect_prob; // Add FF*RSi
+    float p_detect = p_specular + fillFactor * transmit_prob * relativePDE_prob; // Add FF*TSi*iPDE
+    float p_absorb_transmitted = p_detect + fillFactor * transmit_prob * (1.0f - relativePDE_prob); // Add FF*TSi*(1-iPDE)
+    // Note: remaining probability is for absorption in silicon (FF*(1-TSi-RSi)) or microstructure ((1-FF)*(1-RD))
     
-    // Specular reflection is reduced by absorption parameter A
-    float effective_specular_prob = (1.0f - p1) * reflect_prob * (1.0f - absorption_A);
-    float p2 = p1 + effective_specular_prob;  // Specular reflection threshold 
-    
-    // Absorption due to A parameter
-    float absorption_from_specular = (1.0f - p1) * reflect_prob * absorption_A;
-    float p3 = p2 + absorption_from_specular;  // Absorption threshold from specular
-    // Detection threshold
-    float p4 = p3 + (1.0f - p1) * (1.0f - reflect_prob) * relativePDE_prob;
-    
-    // Use one random number to determine outcome
-    if (uniform_sample < p1) {
-        // Diffuse reflection
+    if (uniform_sample < p_diffuse) {
+        // Diffuse reflection: (1-FF)*RD
         return propagate_at_diffuse_reflector(p, s, rng);
     }
-    else if (uniform_sample < p2) {
-        // Specular reflection (those that weren't absorbed by A)
+    else if (uniform_sample < p_specular) {
+        // Specular reflection: FF*RSi
         return propagate_at_specular_reflector(p, s);
-    } 
-    else if (uniform_sample < p3) {
-        // Absorption due to parameter A (for photons that would have been specularly reflected)
-        p.history |= SURFACE_ABSORB;
     }
-    else if (uniform_sample < p4) {
-        // Detection
+    else if (uniform_sample < p_detect) {
+        // Detection: FF*TSi*iPDE
         p.history |= SURFACE_DETECT;
-    } 
-    else {
-        // Absorbed without signal (photons that transmitted but weren't detected)
-        p.history |= SURFACE_ABSORB;
+        return BREAK;
     }
-    
-    return BREAK;
+    else if (uniform_sample < p_absorb_transmitted) {
+        // Absorption without detection: FF*TSi*(1-iPDE)
+        p.history |= SURFACE_ABSORB;
+        return BREAK;
+    }
+    else {
+        // All other absorption cases (in silicon or microstructure)
+        p.history |= SURFACE_ABSORB;
+        return BREAK;
+    }
 }// propagate_at_sipmEmpirical
 
 __device__ int

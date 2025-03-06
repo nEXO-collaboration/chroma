@@ -162,17 +162,26 @@ class GPUGeometry(object):
             if surface.sipmEmpirical_props:
                 props = surface.sipmEmpirical_props
                 diffuseRefl = props.diffuseRefl
-                Absorption = props.Absorption
+                FillFactor = props.FillFactor  # Changed from Absorption to FillFactor
                 relativePDE_pointers = []
                 reflect_pointers = []
-                angles_gpu = ga.to_gpu(np.asarray(props.angles, dtype = np.float32))
+                transmit_pointers = []  # Add new array for transmit pointers
+                angles_gpu = ga.to_gpu(np.asarray(props.angles, dtype=np.float32))
                 self.surface_data.append(angles_gpu)
                 for i, angle in enumerate(props.angles):
+                    # Process reflection data
                     sipmEmpirical_reflect = interp_material_property(wavelengths, props.sipmEmpirical_reflect[i])
                     sipmEmpirical_reflect_gpu = ga.to_gpu(sipmEmpirical_reflect)
                     self.surface_data.append(sipmEmpirical_reflect_gpu)
                     reflect_pointers.append(sipmEmpirical_reflect_gpu)
+                    
+                    # Process transmission data (new)
+                    sipmEmpirical_transmit = interp_material_property(wavelengths, props.sipmEmpirical_transmit[i])
+                    sipmEmpirical_transmit_gpu = ga.to_gpu(sipmEmpirical_transmit)
+                    self.surface_data.append(sipmEmpirical_transmit_gpu)
+                    transmit_pointers.append(sipmEmpirical_transmit_gpu)
 
+                    # Process PDE data
                     sipmEmpirical_relativePDE = interp_material_property(wavelengths, props.sipmEmpirical_relativePDE[i])
                     sipmEmpirical_relativePDE_gpu = ga.to_gpu(sipmEmpirical_relativePDE)
                     self.surface_data.append(sipmEmpirical_relativePDE_gpu)
@@ -180,11 +189,15 @@ class GPUGeometry(object):
 
                 reflect_arr_gpu = make_gpu_struct(8 * len(reflect_pointers), reflect_pointers)
                 self.surface_data.append(reflect_arr_gpu)
+                transmit_arr_gpu = make_gpu_struct(8 * len(transmit_pointers), transmit_pointers)  # Create GPU struct for transmit data
+                self.surface_data.append(transmit_arr_gpu)
                 relativePDE_arr_gpu = make_gpu_struct(8 * len(relativePDE_pointers), relativePDE_pointers)
                 self.surface_data.append(relativePDE_arr_gpu)
-                sipmEmpirical_props = make_gpu_struct(simpempiricalprops_struct_size, [angles_gpu, reflect_arr_gpu, 
-                                                                                       relativePDE_arr_gpu, np.float32(diffuseRefl), 
-                                                                                       np.float32(Absorption),np.uint32(len(props.angles))])
+                
+                # Update GPU struct to include transmit array and use FillFactor instead of Absorption
+                sipmEmpirical_props = make_gpu_struct(simpempiricalprops_struct_size, 
+                                                     [angles_gpu, reflect_arr_gpu, transmit_arr_gpu, relativePDE_arr_gpu,
+                                                      np.float32(diffuseRefl), np.float32(FillFactor), np.uint32(len(props.angles))])
             else:
                 sipmEmpirical_props = np.uint64(0) #NULL
 
