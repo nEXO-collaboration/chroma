@@ -38,7 +38,10 @@ struct SiPMEmpiricalProps
 {
     float *angles;
     float **sipmEmpirical_reflect;
+    float **sipmEmpirical_transmit;  // New field for transmission data
     float **sipmEmpirical_relativePDE;
+    float diffuseRefl;  
+    float FillFactor;  // Changed from Absorption to FillFactor
     unsigned int nangles;
 };
 
