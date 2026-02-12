@@ -11,6 +11,14 @@ Information about the historical development of Chroma can be found at the [bitb
 This repository contains a modified version of Chroma that includes support for wavelength shifters, scintillators, and dichroic filters. 
 This version of Chroma has also been been updated for Python3, Geant4.10.05.p01, and Root 6.18.04, among other things.
 
+## Python Compatibility
+
+Chroma now supports Python 3.12 in host-native GPU workflows.
+
+- Validated in this codebase with Python 3.12 + modern NumPy/PyCUDA.
+- Backward compatibility is maintained for Python 3.10/3.11 workflows.
+- If you run host-native (no container), ensure your local CUDA driver and PyCUDA stack are healthy (`nvidia-smi`, `pycuda.driver.init()`).
+
 ## Container overview
 
 The `installation` directory contains a collection of `Dockerfile`s to build an ubuntu-derived image containing Chroma. This may be a useful reference for other systems. Note that properly linking to boost_python and boost_numpy is nontrivial on systems with both python2 and python3.

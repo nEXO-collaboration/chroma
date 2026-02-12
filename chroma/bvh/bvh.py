@@ -6,7 +6,9 @@ from pycuda.gpuarray import vec
 uint4 = vec.uint4 # pylint: disable-msg=C0103,E1101
 
 CHILD_BITS = 28
-NCHILD_MASK = np.uint32(0xFFFF << CHILD_BITS)
+# NumPy 2.x raises on out-of-range integer casts to uint32.  Mask before cast
+# so this stays valid across NumPy 1.x and 2.x.
+NCHILD_MASK = np.uint32((0xFFFF << CHILD_BITS) & 0xFFFFFFFF)
 
 def unpack_nodes(nodes):
     '''Creates a numpy record array with the contents of nodes
@@ -82,7 +84,7 @@ class WorldCoords(object):
           Returns ndarray(shape=3, dtype=np.uint16) or 
                   ndarray(shape=(n,3), dtype=np.uint16)
         '''
-        fixed = ((np.asfarray(world) - self.world_origin)
+        fixed = ((np.asarray(world, dtype=np.float64) - self.world_origin)
                  / self.world_scale).round()
         if int(fixed.max()) > WorldCoords.MAX_INT or fixed.min() < 0:
             raise OutOfRangeError('range = (%f, %f)' 

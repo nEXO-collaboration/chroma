@@ -325,7 +325,7 @@ class GPUGeometry(object):
 
     def color_solids(self, solid_hit, colors, nblocks_per_thread=64,
                      max_blocks=1024):
-        solid_hit_gpu = ga.to_gpu(np.array(solid_hit, dtype=np.bool))
+        solid_hit_gpu = ga.to_gpu(np.array(solid_hit, dtype=bool))
         solid_colors_gpu = ga.to_gpu(np.array(colors, dtype=np.uint32))
 
         module = get_cu_module('mesh.h', options=cuda_options)
@@ -339,4 +339,3 @@ class GPUGeometry(object):
                          solid_hit_gpu, solid_colors_gpu, self.gpudata,
                          block=(nblocks_per_thread,1,1), 
                          grid=(blocks,1))
-

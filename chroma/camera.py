@@ -937,9 +937,9 @@ class EventViewer(Camera):
     def sum_events(self):
         print('Summing events in file...')
         nchannels = self.geometry.num_channels()
-        sum_hit = np.zeros(shape=nchannels, dtype=np.float)
-        sum_t = np.zeros(shape=nchannels, dtype=np.float)
-        sum_q = np.zeros(shape=nchannels, dtype=np.float)
+        sum_hit = np.zeros(shape=nchannels, dtype=float)
+        sum_t = np.zeros(shape=nchannels, dtype=float)
+        sum_q = np.zeros(shape=nchannels, dtype=float)
 
         nevents = len(self.rr)
 
@@ -997,7 +997,7 @@ class EventViewer(Camera):
             select[0::2] |= select[1::2]
             select[1::2] = 0
             
-        solid_hit = np.zeros(len(self.geometry.mesh.triangles), dtype=np.bool)
+        solid_hit = np.zeros(len(self.geometry.mesh.triangles), dtype=bool)
         solid_color = np.zeros(len(self.geometry.mesh.triangles), dtype=np.uint32)
 
         #solid_hit[self.geometry.channel_index_to_solid_id] = select

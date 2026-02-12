@@ -74,8 +74,12 @@ class Mesh(object):
         '''
         if len(self.triangles) == 0:
             return
-        mask = np.array([(len(set(x)) == 3) for x in self.triangles])
-        self.triangles = self.triangles[mask]
+        # Avoid Python set() on NumPy rows; newer NumPy can surface nested-array
+        # scalars here. A triangle is null iff any two vertex indices are equal.
+        t = np.asarray(self.triangles, dtype=np.int32).reshape(-1, 3)
+        mask = (t[:, 0] != t[:, 1]) & (t[:, 1] != t[:, 2]) & (t[:, 0] != t[:, 2])
+        mask = np.asarray(mask).reshape(-1)
+        self.triangles = t[mask]
         return mask
 
     def assemble(self, key=slice(None), group=True):
@@ -389,4 +393,3 @@ class Geometry(object):
             self.surface_index[self.surface_index == surface_lookup[None]] = -1
         except KeyError:
             pass
-

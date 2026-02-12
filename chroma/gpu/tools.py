@@ -85,15 +85,29 @@ def get_rng_states(size, seed=1):
 
 def to_float3(arr):
     "Returns an pycuda.gpuarray.vec.float3 array from an (N,3) array."
+    arr = np.asarray(arr)
+    if arr.ndim == 1:
+        if arr.size % 3 != 0:
+            raise ValueError('to_float3 expects array size divisible by 3.')
+        arr = arr.reshape((-1, 3))
+    elif arr.ndim != 2 or arr.shape[1] != 3:
+        raise ValueError('to_float3 expects shape (N,3) for array inputs.')
     if not arr.flags['C_CONTIGUOUS']:
         arr = np.asarray(arr, order='c')
-    return arr.astype(np.float32).view(ga.vec.float3)[:,0]
+    return arr.astype(np.float32, copy=False).view(ga.vec.float3).reshape(-1)
 
 def to_uint3(arr):
     "Returns a pycuda.gpuarray.vec.uint3 array from an (N,3) array."
+    arr = np.asarray(arr)
+    if arr.ndim == 1:
+        if arr.size % 3 != 0:
+            raise ValueError('to_uint3 expects array size divisible by 3.')
+        arr = arr.reshape((-1, 3))
+    elif arr.ndim != 2 or arr.shape[1] != 3:
+        raise ValueError('to_uint3 expects shape (N,3) for array inputs.')
     if not arr.flags['C_CONTIGUOUS']:
         arr = np.asarray(arr, order='c')
-    return arr.astype(np.uint32).view(ga.vec.uint3)[:,0]
+    return arr.astype(np.uint32, copy=False).view(ga.vec.uint3).reshape(-1)
 
 def chunk_iterator(nelements, nthreads_per_block=64, max_blocks=1024):
     """Iterator that yields tuples with the values requried to process
