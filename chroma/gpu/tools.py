@@ -99,12 +99,36 @@ def to_float3(arr):
 def to_uint3(arr):
     "Returns a pycuda.gpuarray.vec.uint3 array from an (N,3) array."
     arr = np.asarray(arr)
+
+    # Some loaders produce an extra singleton axis, e.g. (N,3,1).
+    if arr.ndim > 2 and 1 in arr.shape:
+        arr = np.squeeze(arr)
+
+    # Accept common structured/subarray triangle layouts that appear with
+    # newer numpy/pycuda combinations.
+    if arr.ndim == 1 and arr.dtype.subdtype is not None:
+        base_dtype, subshape = arr.dtype.subdtype
+        if len(subshape) == 1 and subshape[0] == 3:
+            arr = arr.astype(base_dtype, copy=False).reshape((-1, 3))
+
+    if arr.ndim == 1 and arr.dtype.fields is not None and len(arr.dtype.fields) >= 3:
+        # Preserve declared field order.
+        field_names = list(arr.dtype.fields.keys())[:3]
+        arr = np.stack([arr[name] for name in field_names], axis=1)
+
+    if arr.ndim == 2 and arr.shape[1] != 3 and arr.shape[0] == 3:
+        arr = arr.T
+
     if arr.ndim == 1:
         if arr.size % 3 != 0:
-            raise ValueError('to_uint3 expects array size divisible by 3.')
+            raise ValueError(
+                f'to_uint3 expects array size divisible by 3; got shape={arr.shape}, dtype={arr.dtype}.'
+            )
         arr = arr.reshape((-1, 3))
     elif arr.ndim != 2 or arr.shape[1] != 3:
-        raise ValueError('to_uint3 expects shape (N,3) for array inputs.')
+        raise ValueError(
+            f'to_uint3 expects shape (N,3); got shape={arr.shape}, dtype={arr.dtype}.'
+        )
     if not arr.flags['C_CONTIGUOUS']:
         arr = np.asarray(arr, order='c')
     return arr.astype(np.uint32, copy=False).view(ga.vec.uint3).reshape(-1)
