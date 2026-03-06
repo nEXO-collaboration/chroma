@@ -33,6 +33,15 @@ intersect_node(const float3 &neg_origin_inv_dir, const float3 &inv_dir,
     }
 }
 
+__device__ float3
+triangle_surface_normal(Geometry *g, int triangle_id)
+{
+    Triangle t = get_triangle(g, triangle_id);
+    float3 edge1 = t.v1 - t.v0;
+    float3 edge2 = t.v2 - t.v1;
+    return normalize(cross(edge1, edge2));
+}
+
 /* Finds the intersection between a ray and `geometry`. If the ray does
    intersect the mesh and the index of the intersected triangle is not equal
    to `last_hit_triangle`, set `min_distance` to the distance from `origin` to
@@ -40,12 +49,17 @@ intersect_node(const float3 &neg_origin_inv_dir, const float3 &inv_dir,
    intersected, else return -1. */
 __device__ int
 intersect_mesh(const float3 &origin, const float3& direction, Geometry *g,
-	       float &min_distance, int last_hit_triangle = -1)
+	       float &min_distance, int last_hit_triangle = -1,
+	       float3 *surface_normal = NULL)
 {
     int triangle_index = -1;
 
     float distance;
     min_distance = -1.0f;
+    unsigned int material_code = 0;
+
+    if (surface_normal != NULL)
+        *surface_normal = make_float3(0.0f, 0.0f, 0.0f);
 
     Node root = get_node(g, 0);
 
@@ -84,11 +98,26 @@ intersect_mesh(const float3 &origin, const float3& direction, Geometry *g,
 			tri_count++;
 			Triangle t = get_triangle(g, node.child);			
 			if (intersect_triangle(origin, direction, t, distance)) {
+			    const float distance_tolerance =
+			        fmaxf(1.0e-4f, 1.0e-5f * fmaxf(fabsf(distance), fabsf(min_distance)));
 
-			    if (triangle_index == -1 || distance < min_distance) {
+			    if (triangle_index == -1 || distance < min_distance - distance_tolerance) {
 				triangle_index = node.child;
 				min_distance = distance;
+                                material_code = g->material_codes[node.child];
+                                if (surface_normal != NULL) {
+                                    *surface_normal = triangle_surface_normal(g, node.child);
+                                }
 			    } // if hit triangle is closer than previous hits
+                            else if (surface_normal != NULL &&
+                                     triangle_index != -1 &&
+                                     fabsf(distance - min_distance) <= distance_tolerance &&
+                                     g->material_codes[node.child] == material_code) {
+                                float3 candidate_normal = triangle_surface_normal(g, node.child);
+                                if (dot(candidate_normal, *surface_normal) < 0.0f)
+                                    candidate_normal = -candidate_normal;
+                                *surface_normal += candidate_normal;
+                            }
 
 			} // if hit triangle
 			
@@ -113,6 +142,12 @@ intersect_mesh(const float3 &origin, const float3& direction, Geometry *g,
     //  printf("node count: %d\n", count);
     //  printf("triangle count: %d\n", tri_count);
     //}
+
+    if (triangle_index != -1 && surface_normal != NULL) {
+        float normal_length = norm(*surface_normal);
+        if (normal_length > CHROMA_EPSILON)
+            *surface_normal /= normal_length;
+    }
 
     return triangle_index;
 }

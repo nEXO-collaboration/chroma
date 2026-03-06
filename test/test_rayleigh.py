@@ -1,20 +1,31 @@
 from .unittest_find import unittest
+import copy
+import tempfile
 import numpy as np
+from scipy import stats
 
 from chroma.geometry import Solid, Geometry
 from chroma.loader import create_geometry_from_obj
 from chroma.make import box
 from chroma.sim import Simulation
 from chroma.demo.optics import water
-from chroma.event import Photons
-from chroma.rootimport import ROOT
-ROOT.gROOT.SetBatch(1)
+from chroma.event import Photons, RAYLEIGH_SCATTER
 
 class TestRayleigh(unittest.TestCase):
     def setUp(self):
-        self.cube = Geometry(water)
-        self.cube.add_solid(Solid(box(100,100,100), water, water))
-        self.geo = create_geometry_from_obj(self.cube, update_bvh_cache=False)
+        cache_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(cache_dir.cleanup)
+        self.cache_dir = cache_dir.name
+
+        self.medium = copy.deepcopy(water)
+        self.medium.name = 'rayleigh_test_water'
+        self.medium.set('scattering_length', 10.0)
+
+        self.cube = Geometry(self.medium)
+        self.cube.add_solid(Solid(box(100,100,100), self.medium, self.medium))
+        self.geo = create_geometry_from_obj(self.cube, update_bvh_cache=False,
+                                            read_bvh_cache=False,
+                                            cache_dir=self.cache_dir)
         self.sim = Simulation(self.geo, geant4_processes=0)
 
         nphotons = 100000
@@ -39,17 +50,24 @@ class TestRayleigh(unittest.TestCase):
         self.assertFalse(aborted.any())
 
         # Compute the dot product between initial and final dir
-        rayleigh_scatters = (photons_end.flags & (1 << 4)) > 0
-        cos_scatter = (self.photons.dir[rayleigh_scatters] * photons_end.dir[rayleigh_scatters]).sum(axis=1)
-        theta_scatter = np.arccos(cos_scatter)
-        h = ROOT.TH1F('hpx','Histogram',100, 0, np.pi)
-        for ts in theta_scatter:
-            h.Fill(ts)
+        rayleigh_scatters = (photons_end.flags & RAYLEIGH_SCATTER) > 0
+        self.assertGreater(rayleigh_scatters.sum(), 1000)
 
-        # The functional form for polarized light should be
-        # (1 + \cos^2 \theta)\sin \theta according to GEANT4 physics
-        # reference manual.
-        f = ROOT.TF1("pol_func", "[0]*(1+cos(x)**2)*sin(x)", 0, np.pi)
-        h.Fit(f, 'NQ')
-        self.assertGreater(f.GetProb(), 1e-3)
+        cos_scatter = (self.photons.dir[rayleigh_scatters] *
+                       photons_end.dir[rayleigh_scatters]).sum(axis=1)
+        cos_scatter = np.clip(cos_scatter, -1.0, 1.0)
 
+        # For polarized light the scattering-angle PDF is proportional to
+        # (1 + cos(theta)^2) * sin(theta), so the CDF in u = cos(theta) is
+        # (u^3 + 3u + 4) / 8 over [-1, 1].
+        ks_result = stats.kstest(
+            cos_scatter,
+            lambda u: np.clip((u**3 + 3.0*u + 4.0) / 8.0, 0.0, 1.0),
+        )
+        self.assertGreater(ks_result.pvalue, 1e-3)
+
+        scattered_dirs = photons_end.dir[rayleigh_scatters]
+        scattered_pols = photons_end.pol[rayleigh_scatters]
+        self.assertLess(np.abs(np.sum(scattered_dirs * scattered_pols, axis=1)).max(), 1e-5)
+        self.assertTrue(np.allclose(np.linalg.norm(scattered_dirs, axis=1), 1.0, atol=1e-5))
+        self.assertTrue(np.allclose(np.linalg.norm(scattered_pols, axis=1), 1.0, atol=1e-5))

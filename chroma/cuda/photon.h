@@ -85,25 +85,19 @@ fill_state(State &s, Photon &p, Geometry *g)
 {
     p.last_hit_triangle = intersect_mesh(p.position, p.direction, g,
                                          s.distance_to_boundary,
-                                         p.last_hit_triangle);
+                                         p.last_hit_triangle,
+                                         &s.surface_normal);
 
     if (p.last_hit_triangle == -1) {
         p.history |= NO_HIT;
         return;
     }
 
-    Triangle t = get_triangle(g, p.last_hit_triangle);
-
     unsigned int material_code = g->material_codes[p.last_hit_triangle];
 
     int inner_material_index = convert(0xFF & (material_code >> 24));
     int outer_material_index = convert(0xFF & (material_code >> 16));
     s.surface_index = convert(0xFF & (material_code >> 8));
-
-    float3 v01 = t.v1 - t.v0;
-    float3 v12 = t.v2 - t.v1;
-
-    s.surface_normal = normalize(cross(v01, v12));
 
     Material *material1, *material2;
     if (dot(s.surface_normal,-p.direction) > 0.0f) {
@@ -863,4 +857,3 @@ propagate_at_surface(Photon &p, State &s, curandState &rng, Geometry *geometry,
 } // propagate_at_surface
 
 #endif
-
